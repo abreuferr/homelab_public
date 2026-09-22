@@ -26,7 +26,30 @@ O serviço de DHCP da LAN está a cargo de `proton.particula.local` (não do OPN
 
 ## Registros conhecidos
 
-Além de proton/neutron, hosts com A record cadastrado incluem: `myspeed.particula.local` (.15, renomeado de `speed.particula.local`), `phpipam.particula.local` (.23), `freshrss.particula.local` (.18), `qbittorrent.particula.local` (.17), `syslog.particula.local` (.16), `vaultwarden.particula.local` (.19), `opnsense.particula.local`/`pfsense` (.1).
+**Lista completa revalidada em 2026-09-22** (via API do Technitium em proton, todos os A records da zona `particula.local`, IPs sanitizados no range `203.0.113.0/24`):
+
+| Host | IP |
+|---|---|
+| wifi.particula.local | .2 |
+| quark.particula.local | .5 |
+| proton.particula.local | .10 |
+| neutron.particula.local | .11 |
+| pihole.particula.local | .12 |
+| netbird.particula.local | .13 |
+| openbao.particula.local | .15 |
+| syslog.particula.local | .16 |
+| qbittorrent.particula.local | .17 |
+| freshrss.particula.local | .18 |
+| vaultwarden.particula.local | .19 |
+| adguard.particula.local | .22 |
+| phpipam.particula.local | .23 |
+| immich.particula.local | .25 |
+| opnsense.particula.local / pfsense.particula.local | .1 (dois nomes pro mesmo IP) |
+| taquion.particula.local | .171 |
+
+Além destes, existem alguns hosts registrados via DHCP dinâmico (estação de trabalho, celular) que não são serviços de infraestrutura e não estão listados aqui.
+
+**Correção 2026-09-22:** `myspeed.particula.local` (.15) **não existe mais** — nome antigo desta doc estava desatualizado. O registro em .15 foi trocado para `openbao.particula.local` em 2026-08-25 (junto com a instalação da CA de produção no LXC 105).
 
 `ca.particula.local` (.14) e `bitwarden.particula.local` (.21, host antigo) tiveram as VMs apagadas em 2026-09-09; A records removidos no mesmo dia (via API em proton, propagado a neutron).
 

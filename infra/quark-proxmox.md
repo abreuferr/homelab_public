@@ -21,20 +21,22 @@ VM 101 (`ca`) e VM 113 (`bitwarden`) já foram apagadas — não existem mais no
 
 **Containers LXC (pct):**
 
-| VMID | Nome |
-|---|---|
-| 100 | netbird |
-| 103 | adguard |
-| 104 | pihole |
-| 105 | openbao (CA de produção) |
-| 106 | qbittorrent |
-| 107 | freshrss |
-| 110 | vaultwarden |
-| 114 | immich |
-| 116 | proton (DNS primário) |
-| 117 | neutron (DNS secundário) |
-| 118 | syslog |
-| 119 | phpipam |
+| VMID | Nome | IP | Registro DNS |
+|---|---|---|---|
+| 100 | netbird | 203.0.113.13 | netbird.particula.local |
+| 103 | adguard | 203.0.113.22 | adguard.particula.local |
+| 104 | pihole | 203.0.113.12 | pihole.particula.local |
+| 105 | openbao (CA de produção) | 203.0.113.15 | openbao.particula.local |
+| 106 | qbittorrent | 203.0.113.17 | qbittorrent.particula.local |
+| 107 | freshrss | 203.0.113.18 | freshrss.particula.local |
+| 110 | vaultwarden | 203.0.113.19 | vaultwarden.particula.local |
+| 114 | immich | 203.0.113.25 | immich.particula.local |
+| 116 | proton (DNS primário) | 203.0.113.10 | proton.particula.local |
+| 117 | neutron (DNS secundário) | 203.0.113.11 | neutron.particula.local |
+| 118 | syslog | 203.0.113.16 | syslog.particula.local |
+| 119 | phpipam | 203.0.113.23 | phpipam.particula.local |
+
+IPs revalidados em 2026-09-22. Todos os 12 LXCs batem 1:1 com um registro DNS — nenhum host órfão. `vaultwarden` (Alpine) é o único que não aceita SSH direto na porta 22; acesso só via `pct exec`/`pct enter`.
 
 Inventário decai rápido — sempre revalidar `qm list`/`pct list` ao vivo antes de agir, em vez de confiar num levantamento antigo.
 
@@ -81,11 +83,19 @@ Correção aplicada nos 11 VMs/CTs afetados (100,103,104,106,107,110,111,113,116
 ## Segurança e hardening
 
 - SSH hardened: `PermitRootLogin no`, `PasswordAuthentication no`, só pubkey, porta 59022, `MaxAuthTries 3`, `MaxSessions 2`, `ClientAliveCountMax 2`, `TCPKeepAlive no`, `LogLevel VERBOSE` — mesmo padrão aplicado em todo o homelab.
-- Firewall do Proxmox habilitado (`/etc/pve/nodes/quark/host.fw`), restringindo 8006/3128 à rede `203.0.113.0/24`, liberando 59022/icmp.
+- Firewall do Proxmox habilitado (`/etc/pve/nodes/quark/host.fw`), com regras `ACCEPT` de origem `203.0.113.0/24` para 8006/3128/8008 e `ACCEPT` para 59022/icmp.
 - Certificado do painel web (8006) emitido pela CA interna (`Particula Intermediate CA`), não self-signed genérico.
 - `/root/.ssh/authorized_keys` é um symlink para `/etc/pve/priv/authorized_keys` (mecanismo interno do Proxmox para SSH entre nós de cluster, presente mesmo em standalone) — a chave RSA ali é do próprio nó, não remover.
 - Sem `fail2ban` (SSH já mitiga por ser só pubkey), sem `unattended-upgrades`, AppArmor com só 30/129 perfis em enforce (majoritariamente LXC).
 - Processo `ProxMenux` (dashboard comunitário, porta 8008, roda como root) — legítimo, mas por ser projeto de terceiros e correr como root, vale manter atualizado e considerar restringir a porta via firewall.
+
+**Achado 2026-09-22 (varredura de segurança):** `policy_in` do `host.fw` está como `ACCEPT`, não `DROP`. Isso torna as regras de origem `203.0.113.0/24` acima **cosméticas** — qualquer pacote não coberto por elas é aceito de qualquer origem. O bloqueio real hoje vem só do que está explicitamente em `DROP` no `cluster.fw` (SMB/NetBIOS/UPnP) e, presumivelmente, do isolamento de rede a montante. **Ainda não corrigido** — mudar `policy_in` para `DROP` exige confirmação antes de aplicar (risco de lockout do próprio SSH se a regra ficar incompleta).
+
+Outros achados da mesma varredura:
+- `rpcbind`/`nfs-common` instalados e escutando publicamente sem uso de NFS identificado — candidato a desabilitar.
+- Serviço de auto-update de terceiros (bind `0.0.0.0`, roda como root) exige autenticação — não é acesso aberto, apesar do bind amplo.
+- `iperf3` foi removido do host (decisão do usuário) — não escuta mais.
+- 2 reboots seguidos sem causa identificável — journal não reteve a janela (poucos boots armazenados, com lacunas de semanas).
 
 ## Memória e swap (zram)
 
