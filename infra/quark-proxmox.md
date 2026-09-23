@@ -131,3 +131,14 @@ Não havia telemetria de software para temperatura antes disso (só inspeção f
 ## Alertas de falha no backup via ntfy (adicionado em 2026-09-05)
 
 `/usr/local/sbin/proxmox-backup.sh` passou a chamar `/usr/local/sbin/ntfy-alert.sh` (prioridade `high`) em todo ponto de falha: lock já em uso, `/mnt/backup` não montado, espaço insuficiente, `vzdump` com exit code != 0. Substitui a expectativa antiga (comentário do próprio script) de que "cron/e-mail" sinalizaria a falha — nunca sinalizava, por causa do postfix loopback-only (mesma razão do monitor de temperatura acima). Backup do script anterior em `/usr/local/sbin/proxmox-backup.sh.bak-20260905113716` no host. Validado com `bash -n` nos dois lados (local e no host) e teste direto do `ntfy-alert.sh` (HTTP 200, notificação recebida); não foi rodado um `vzdump` real de teste, mesma razão do bugfix anterior — validação de ponta a ponta acontece na próxima execução agendada (`0 2 * * *`). Detalhes do script e dos tópicos em [../servicos/ntfy.md](../servicos/ntfy.md).
+
+## Desligamento em massa para manutenção (criado 2026-09-23)
+
+`/usr/local/sbin/shutdown-all-guests.sh` (root:root, 750). Desliga todas as VMs e LXCs rodando no host, para manutenção do host físico (`sudo /usr/local/sbin/shutdown-all-guests.sh`).
+
+Fica em `sbin`, não `bin`: é script de administração (exige root), mesma convenção dos scripts de backup/restore e do `ntfy-alert.sh`.
+
+- Lista VMs/LXCs em execução via `qm list`/`pct list`, dispara `qm shutdown`/`pct shutdown` em paralelo para todos com timeout de 180s e força o desligamento (`--forceStop`/`--force`) se algum não parar a tempo. Ao final, mostra `qm list`/`pct list` para confirmar.
+- Exige root (checa `id -u`).
+- Inclui o gateway (OPNsense) e os LXCs de DNS — rodar derruba internet e DNS da LAN até a manutenção terminar e os guests voltarem a subir manualmente.
+- Validado só com `bash -n` (sintaxe); não foi rodado de verdade, pra não derrubar produção sem necessidade real de manutenção.
