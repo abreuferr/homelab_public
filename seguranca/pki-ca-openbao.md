@@ -56,7 +56,7 @@ Endpoints públicos do OpenBao úteis sem autenticação: `GET /v1/pki_root/ca/p
 
 **Sobras da migração (removidas em 2026-10-15):** `/opt/openbao/data.pre-migration-20260825/` e `tls/tls.{crt,key}.bak.selfsigned` foram apagados (`shred -u` + `rm`). `shred` não garante limpeza em LVM thin; as cópias nos backups vzdump de 10-14 e 10-15 saem na rotação de 2 dias (backup de 10-17). Serviço seguiu ativo e desselado.
 
-**Permissão:** `/etc/openbao/openbao.env` está vazio com modo 644. Ajustar para 600 antes de colocar qualquer valor nele.
+**Permissão (corrigida em 2026-10-15):** `/etc/openbao/openbao.env` está vazio e agora tem modo 600 (`openbao:openbao`). Era 644.
 
 **CLI sem `BAO_ADDR`:** em SSH não interativo o `/etc/profile.d/bao-addr.sh` não carrega. `bao status` falha por SAN (`127.0.0.1`). Usar `BAO_ADDR=https://203.0.113.15:8200`.
 
