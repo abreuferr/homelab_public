@@ -51,8 +51,10 @@ Endpoints públicos do OpenBao úteis sem autenticação: `GET /v1/pki_root/ca/p
 **Limitações abertas:**
 - Retenção de só 2 dias (`RETENTION_KEEP=2`). Corrupção não percebida em 2 dias não tem versão boa para voltar.
 - Sem cópia off-site. O disco de backup está no mesmo host físico do LXC.
-- O storage é `file`, então não há `bao operator raft snapshot`. O backup é snapshot LVM do rootfs com o serviço rodando (consistente só no nível de crash). Restauração nunca testada.
+- O storage é `file`, então não há `bao operator raft snapshot`. O backup é snapshot LVM do rootfs com o serviço rodando (consistente só no nível de crash). Teste de restore feito em 2026-10-15 (ver abaixo); unseal e emissão de certificado a partir do restore ainda não testados.
 - Depois de qualquer restore o cofre sobe selado. Precisa de 2 das 3 chaves Shamir (Vaultwarden, que também é backupeado no mesmo disco).
+
+**Teste de restore (2026-10-15):** `pct restore` do backup de 10-15 02:05 no ID temporário 905, com `sha256sum -c` antes. Procedimento: `pct restore 905 <tar.zst> --storage local-lvm --unprivileged 1`, depois `pct set 905 --delete net0 --onboot 0 --hostname openbao-restoretest` **antes de iniciar** (o restore copia IP e MAC do 105; sem remover `net0` haveria conflito na LAN). Resultado: CT sobe só com `lo`, `openbao.service` ativo, `Initialized true`, `Sealed true`, Shamir 3/2, v2.6.2, sem erro no log. Storage com 80 arquivos contra 92 no CT vivo (diferença = tokens/leases após as 02:05). CT 905 destruído com `pct destroy 905 --purge`. **Não coberto:** unseal e emissão de certificado a partir do restore (exige 2 das 3 chaves Shamir).
 
 **Sobras da migração (removidas em 2026-10-15):** `/opt/openbao/data.pre-migration-20260825/` e `tls/tls.{crt,key}.bak.selfsigned` foram apagados (`shred -u` + `rm`). `shred` não garante limpeza em LVM thin; as cópias nos backups vzdump de 10-14 e 10-15 saem na rotação de 2 dias (backup de 10-17). Serviço seguiu ativo e desselado.
 
