@@ -54,7 +54,7 @@ Endpoints públicos do OpenBao úteis sem autenticação: `GET /v1/pki_root/ca/p
 - O storage é `file`, então não há `bao operator raft snapshot`. O backup é snapshot LVM do rootfs com o serviço rodando (consistente só no nível de crash). Restauração nunca testada.
 - Depois de qualquer restore o cofre sobe selado. Precisa de 2 das 3 chaves Shamir (Vaultwarden, que também é backupeado no mesmo disco).
 
-**Sobras da migração em `/opt/openbao/` (pendente apagar, com `shred` nos arquivos de chave):** `data.pre-migration-20260825/` (cópia antiga do storage) e `tls/tls.{crt,key}.bak.selfsigned` (certificado e chave autoassinados antigos, dono root).
+**Sobras da migração (removidas em 2026-10-15):** `/opt/openbao/data.pre-migration-20260825/` e `tls/tls.{crt,key}.bak.selfsigned` foram apagados (`shred -u` + `rm`). `shred` não garante limpeza em LVM thin; as cópias nos backups vzdump de 10-14 e 10-15 saem na rotação de 2 dias (backup de 10-17). Serviço seguiu ativo e desselado.
 
 **Permissão:** `/etc/openbao/openbao.env` está vazio com modo 644. Ajustar para 600 antes de colocar qualquer valor nele.
 
