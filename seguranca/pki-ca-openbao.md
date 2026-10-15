@@ -51,14 +51,28 @@ Endpoints públicos do OpenBao úteis sem autenticação: `GET /v1/pki_root/ca/p
 - **Encaminhamento ao syslog (2026-10-15):** `rsyslog` instalado no LXC 105 (não existia). `/etc/rsyslog.d/30-openbao-audit.conf` lê `audit.log` (`imfile`, tag `openbao-audit:`) e envia por **TCP** a `203.0.113.16:514`, com fila em disco (100 MiB) para não perder registros se o syslog cair. Só o audit log é encaminhado, nenhuma outra mensagem do LXC. Chega em `/var/log/remote/openbao/messages.log` no CT 118. Ver [../servicos/syslog.md](../servicos/syslog.md).
 - **Pendente:** alerta sobre falha de gravação do audit log (não existe canal de alerta no homelab).
 
+## Roles de emissão e rede (2026-10-15)
+
+**Roles em `pki_int`:**
+- `particula-local`: `server_flag=true` e `client_flag=true`, ou seja, EKU `ServerAuth` + `ClientAuth`. Mantida **sem mudança** porque os nós do Galera (`node1`..`node3`) usam o certificado também como cliente entre si; tirar `ClientAuth` pode quebrar a replicação/SST na próxima renovação (não testado). Usar para qualquer serviço com mTLS.
+- `particula-server` (criada 2026-10-15): igual à anterior, exceto `client_flag=false` (EKU só `ServerAuth`). Usar para serviços só-web (Vaultwarden, phpIPAM, AdGuard, painel do Proxmox, OPNsense, OpenBao). Ambas: `allowed_domains=[particula.local]` com subdomínios, `allow_any_name=false`, `enforce_hostnames=true`, `allowed_ip_sans_cidr=[203.0.113.0/24]`, RSA 2048, `max_ttl=8760h`. Testado: emite com `ServerAuth` e URL de CRL nova; recusa `x.exemplo.com` e IP `10.0.0.5`. A policy `pki-operator` cobre as duas.
+- Correção: uma versão anterior desta doc dizia que `ext_key_usage` vazio gerava certificado sem EKU. Errado: as flags `server_flag`/`client_flag` definem o EKU. Dos 16 leafs emitidos, só 1 (`bitwarden`, antigo, de outra role) tem apenas `ServerAuth`.
+- Sobras em `~cferreira/` no LXC 105 (`*.before.hcl`, `role-particula-local.before.json`, de 2026-10-15 12:36): backups de uma sessão anterior, conferir e apagar.
+
+**Rede e TLS do listener:**
+- A porta 8200 só aceita `203.0.113.0/24` e o próprio LXC, por `nftables` **dentro do LXC** (`/etc/nftables.conf`, serviço habilitado: `iif lo accept`, `tcp dport 8200 ip saddr 203.0.113.0/24 accept`, `tcp dport 8200 drop`; o resto do tráfego, incluindo SSH, segue liberado). Testado: LAN, loopback e SSH continuam acessando. O bloqueio de outras sub-redes não foi testado.
+- **Não usar o firewall do Proxmox para o CT 105:** não existe `105.fw` e o `net0` não tem `firewall=1`; ligá-lo exige reiniciar o CT, o que sela o cofre. As regras do `host.fw` valem só para o host `quark`.
+- Ganho pequeno: todo acesso à 8200 já vem da LAN e o OPNsense não tem port-forward. É defesa em profundidade.
+- `tls_min_version = "tls12"` no listener do `openbao.hcl`, aplicado com reload (sem selar). O OpenBao já usava TLS 1.2 como mínimo por padrão; a linha só deixa isso explícito. TLS 1.1 rejeitado, 1.2 e 1.3 aceitos.
+
 ## Revisão de segurança (2026-10-15) — pendências
 
 Revisão somente leitura, sem token. Itens abertos, por prioridade:
 
 1. **Média:** reemitir os demais leafs com as URLs novas, na renovação de cada um (ver acima). Inventário em 2026-10-15: 14 leafs ainda com URL antiga; o mais próximo vence em 2027-03-12 (`bitwarden`, `ca`). `ca.particula.local` (VM apagada) e, a confirmar, `bitwarden` e `pfsense` são certificados de hosts que não existem mais; candidatos a revogação.
 2. ~~Audit device~~ **Resolvido em 2026-10-15** (ver seção abaixo).
-3. **Média:** policy `pki-operator` criada e testada em 2026-10-15 (emite em `pki_int/issue/particula-local`, lê/lista/revoga certificados, lê config e `sys/audit`; nega escrita em config, policies e mounts). **Ainda não atribuída:** o `userpass` do usuário `cferreira` segue com a policy `admin` (`path "*"` com `sudo`), root-equivalente, com TTL de ~1h. Trocar para `pki-operator` no uso diário e deixar `admin` só para o root token do Vaultwarden. A role `particula-local` tem `ext_key_usage` vazio; definir `ServerAuth`.
-4. **Média:** restringir a porta 8200 à `203.0.113.0/24` no firewall do Proxmox; definir `tls_min_version = "tls12"` no listener (hoje aceita TLS 1.2 e 1.3, rejeita 1.1).
+3. **Média:** policy `pki-operator` criada e testada em 2026-10-15 (emite em `pki_int/issue/particula-local` e `pki_int/issue/particula-server`, lê/lista/revoga certificados, lê config e `sys/audit`; nega escrita em config, policies e mounts). **Ainda não atribuída:** o `userpass` do usuário `cferreira` segue com a policy `admin` (`path "*"` com `sudo`), root-equivalente, com TTL de ~1h. Trocar para `pki-operator` no uso diário e deixar `admin` só para o root token do Vaultwarden.
+4. ~~Porta 8200 e TLS mínimo~~ **Resolvido em 2026-10-15** (ver seção "Roles de emissão e rede").
 5. **Baixa:** `openbao.hcl` está 644 (passar a 640); remover blocos de exemplo comentados; confirmar NTP no host `quark` (no LXC `NTP service: inactive`); sem `unattended-upgrades` e sem `auditd`.
 6. **Baixa:** nenhuma CA tem name constraints para `particula.local`; backup off-site inexistente; unseal e emissão a partir do restore não testados.
 7. **Sem evidência (precisa de token):** parâmetros reais das roles (`max_ttl`, `key_usage`), policies, mounts e TTL do token atual.
