@@ -42,6 +42,24 @@ Endpoints públicos do OpenBao úteis sem autenticação: `GET /v1/pki_root/ca/p
 - Chaves de unseal reais e o histórico de root tokens ficam salvos no Vaultwarden do usuário — nunca em arquivo de memória ou neste repositório.
 - Achado corrigido: `~/.vault-token` continha o root token antigo em texto puro há meses, `ttl=0` (nunca expira) — rotacionado.
 
+## Backup e configuração do host (verificado em 2026-10-15)
+
+**Configuração:** OpenBao v2.6.2, storage `file` em `/opt/openbao/data` (modo 700), listener TLS em `0.0.0.0:8200`, `ui = true`, sem bloco `seal` (Shamir 3 chaves, quórum 2). HA desligado. Certificado do listener emitido pela `Particula Intermediate CA`, SANs `openbao.particula.local` + `203.0.113.15`, vence em **2027-08-25**. Unit systemd com `ProtectSystem=full`, `ProtectHome=read-only`, `PrivateTmp`, `PrivateDevices`, `NoNewPrivileges`, `CapabilityBoundingSet=CAP_SYSLOG`.
+
+**Backup:** o LXC 105 entra no `vzdump --all` diário das 02:00 no `quark` (detalhes em [../infra/quark-proxmox.md](../infra/quark-proxmox.md)). Verificado: um backup por dia desde 2026-10-08, sem erro. O último (2026-10-15 02:05, 324 MiB) passou em `sha256sum -c` e `zstd -t` e contém `etc/openbao/openbao.hcl` e `opt/openbao/data/core/`.
+
+**Limitações abertas:**
+- Retenção de só 2 dias (`RETENTION_KEEP=2`). Corrupção não percebida em 2 dias não tem versão boa para voltar.
+- Sem cópia off-site. O disco de backup está no mesmo host físico do LXC.
+- O storage é `file`, então não há `bao operator raft snapshot`. O backup é snapshot LVM do rootfs com o serviço rodando (consistente só no nível de crash). Restauração nunca testada.
+- Depois de qualquer restore o cofre sobe selado. Precisa de 2 das 3 chaves Shamir (Vaultwarden, que também é backupeado no mesmo disco).
+
+**Sobras da migração em `/opt/openbao/` (pendente apagar, com `shred` nos arquivos de chave):** `data.pre-migration-20260825/` (cópia antiga do storage) e `tls/tls.{crt,key}.bak.selfsigned` (certificado e chave autoassinados antigos, dono root).
+
+**Permissão:** `/etc/openbao/openbao.env` está vazio com modo 644. Ajustar para 600 antes de colocar qualquer valor nele.
+
+**CLI sem `BAO_ADDR`:** em SSH não interativo o `/etc/profile.d/bao-addr.sh` não carrega. `bao status` falha por SAN (`127.0.0.1`). Usar `BAO_ADDR=https://203.0.113.15:8200`.
+
 ## Confiar na CA em clientes
 
 Chrome no Linux **não lê `/etc/ssl/certs` do sistema** — usa Chrome Root Store/NSS próprio. Importar a raiz via `chrome://settings/certificates` → Autoridades → Importar `.pem` → marcar "confiar para identificar sites"; alternativa via `certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "Particula CA" -i <arquivo>`. Vale para qualquer serviço novo assinado por essa CA.
