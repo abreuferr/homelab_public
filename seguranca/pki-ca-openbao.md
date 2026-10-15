@@ -57,7 +57,6 @@ Endpoints públicos do OpenBao úteis sem autenticação: `GET /v1/pki_root/ca/p
 - `particula-local`: `server_flag=true` e `client_flag=true`, ou seja, EKU `ServerAuth` + `ClientAuth`. Mantida **sem mudança** porque os nós do Galera (`node1`..`node3`) usam o certificado também como cliente entre si; tirar `ClientAuth` pode quebrar a replicação/SST na próxima renovação (não testado). Usar para qualquer serviço com mTLS.
 - `particula-server` (criada 2026-10-15): igual à anterior, exceto `client_flag=false` (EKU só `ServerAuth`). Usar para serviços só-web (Vaultwarden, phpIPAM, AdGuard, painel do Proxmox, OPNsense, OpenBao). Ambas: `allowed_domains=[particula.local]` com subdomínios, `allow_any_name=false`, `enforce_hostnames=true`, `allowed_ip_sans_cidr=[203.0.113.0/24]`, RSA 2048, `max_ttl=8760h`. Testado: emite com `ServerAuth` e URL de CRL nova; recusa `x.exemplo.com` e IP `10.0.0.5`. A policy `pki-operator` cobre as duas.
 - Correção: uma versão anterior desta doc dizia que `ext_key_usage` vazio gerava certificado sem EKU. Errado: as flags `server_flag`/`client_flag` definem o EKU. Dos 16 leafs emitidos, só 1 (`bitwarden`, antigo, de outra role) tem apenas `ServerAuth`.
-- Sobras em `~cferreira/` no LXC 105 (`*.before.hcl`, `role-particula-local.before.json`, de 2026-10-15 12:36): backups de uma sessão anterior, conferir e apagar.
 
 **Rede e TLS do listener:**
 - A porta 8200 só aceita `203.0.113.0/24` e o próprio LXC, por `nftables` **dentro do LXC** (`/etc/nftables.conf`, serviço habilitado: `iif lo accept`, `tcp dport 8200 ip saddr 203.0.113.0/24 accept`, `tcp dport 8200 drop`; o resto do tráfego, incluindo SSH, segue liberado). Testado: LAN, loopback e SSH continuam acessando. O bloqueio de outras sub-redes não foi testado.
@@ -66,6 +65,8 @@ Endpoints públicos do OpenBao úteis sem autenticação: `GET /v1/pki_root/ca/p
 - `tls_min_version = "tls12"` no listener do `openbao.hcl`, aplicado com reload (sem selar). O OpenBao já usava TLS 1.2 como mínimo por padrão; a linha só deixa isso explícito. TLS 1.1 rejeitado, 1.2 e 1.3 aceitos.
 
 ## Revisão de segurança (2026-10-15) — pendências
+
+Policies existentes no servidor (2026-10-15): `admin`, `default`, `fix-pki-crl`, `pki-issue-https`, `pki-operator`, `pki-read`, `root`. Só `pki-operator` está documentada em detalhe; documentar as demais. Sobras de backups de policies em `~cferreira/` foram removidas em 2026-10-15.
 
 Revisão somente leitura, sem token. Itens abertos, por prioridade:
 
