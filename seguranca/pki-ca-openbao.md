@@ -35,6 +35,34 @@ Endpoints públicos do OpenBao úteis sem autenticação: `GET /v1/pki_root/ca/p
 
 **CRL:** `auto_rebuild=true` habilitado em `pki_root/config/crl` e `pki_int/config/crl` (estava `false` com `expiry=72h`, CRL ficou vencida ~5 meses até ser corrigido em 2026-08-04). Rotação exige capability `update` no path, não `read`.
 
+**URLs de AIA/CRL (corrigidas em 2026-10-15):** os certificados emitidos até então traziam `http://ca.particula.local:8200/...` (AIA e CRL). Estavam quebradas: `ca.particula.local` não resolve mais (VM apagada em 2026-09-09) e `http://` não funciona porque o listener só aceita TLS. Revogar certificado não tinha efeito prático. A CRL em si sempre esteve correta.
+
+- `pki_root/config/urls` e `pki_int/config/urls` agora usam `https://openbao.particula.local:8200/v1/<mount>/ca` e `.../crl`. Usar o nome (não o IP): as URLs ficam anos dentro dos certificados.
+- Vale só para certificados emitidos depois da mudança. O leaf do próprio OpenBao foi reemitido (`pki_int/issue/particula-local`, TTL 8760h, vence 2027-10-15) e trocado em `/opt/openbao/tls/` (600, `openbao:openbao`) com `systemctl reload openbao` — o reload não sela o cofre. Validado: `openssl verify`, conexão externa com `-verify_return_error` e CRL com HTTP 200 pelo nome.
+- **Pendente:** os outros leafs (bitwarden/Vaultwarden, phpIPAM, painel do Proxmox etc.) mantêm a URL antiga até a próxima renovação. A `Particula Intermediate CA` só troca ao ser reassinada pela raiz (renovação em 2031, ou antes se necessário).
+- Gotcha: o campo `ca_chain` devolvido pela emissão trouxe só a intermediária, sem a raiz. Para validar, buscar a raiz em `GET /v1/pki_root/ca/pem`.
+
+## Audit device (habilitado em 2026-10-15)
+
+- O OpenBao 2.6 **não aceita** `bao audit enable` pela API (erro 400: "use declarative, config-based audit device management"). O audit device é declarado no `/etc/openbao/openbao.hcl`, bloco `audit "file" "file-audit"` com `file_path=/var/log/openbao/audit.log` e `mode=0600`. Aplicado com `systemctl reload openbao` (SIGHUP), sem selar o cofre.
+- `/var/log/openbao/` é `openbao:openbao` 750. Rotação em `/etc/logrotate.d/openbao`: semanal, 8 cópias, compactada, com `reload` do OpenBao no `postrotate` para reabrir o arquivo. Testado com `logrotate -f`: o novo arquivo voltou a receber registros e o cofre seguiu desselado.
+- O log guarda tokens e valores sensíveis com hash (HMAC), não em texto puro (checado em 2026-10-15).
+- **Risco:** com um único audit device, se a gravação falhar (disco cheio, permissão) o OpenBao recusa todas as requisições. O disco do LXC tem 2,7 GiB livres (26% usado). Vigiar o espaço em `/var/log/openbao`.
+- **Encaminhamento ao syslog (2026-10-15):** `rsyslog` instalado no LXC 105 (não existia). `/etc/rsyslog.d/30-openbao-audit.conf` lê `audit.log` (`imfile`, tag `openbao-audit:`) e envia por **TCP** a `203.0.113.16:514`, com fila em disco (100 MiB) para não perder registros se o syslog cair. Só o audit log é encaminhado, nenhuma outra mensagem do LXC. Chega em `/var/log/remote/openbao/messages.log` no CT 118. Ver [../servicos/syslog.md](../servicos/syslog.md).
+- **Pendente:** alerta sobre falha de gravação do audit log (não existe canal de alerta no homelab).
+
+## Revisão de segurança (2026-10-15) — pendências
+
+Revisão somente leitura, sem token. Itens abertos, por prioridade:
+
+1. **Média:** reemitir os demais leafs com as URLs novas, na renovação de cada um (ver acima). Inventário em 2026-10-15: 14 leafs ainda com URL antiga; o mais próximo vence em 2027-03-12 (`bitwarden`, `ca`). `ca.particula.local` (VM apagada) e, a confirmar, `bitwarden` e `pfsense` são certificados de hosts que não existem mais; candidatos a revogação.
+2. ~~Audit device~~ **Resolvido em 2026-10-15** (ver seção abaixo).
+3. **Média:** policy `pki-operator` criada e testada em 2026-10-15 (emite em `pki_int/issue/particula-local`, lê/lista/revoga certificados, lê config e `sys/audit`; nega escrita em config, policies e mounts). **Ainda não atribuída:** o `userpass` do usuário `cferreira` segue com a policy `admin` (`path "*"` com `sudo`), root-equivalente, com TTL de ~1h. Trocar para `pki-operator` no uso diário e deixar `admin` só para o root token do Vaultwarden. A role `particula-local` tem `ext_key_usage` vazio; definir `ServerAuth`.
+4. **Média:** restringir a porta 8200 à `203.0.113.0/24` no firewall do Proxmox; definir `tls_min_version = "tls12"` no listener (hoje aceita TLS 1.2 e 1.3, rejeita 1.1).
+5. **Baixa:** `openbao.hcl` está 644 (passar a 640); remover blocos de exemplo comentados; confirmar NTP no host `quark` (no LXC `NTP service: inactive`); sem `unattended-upgrades` e sem `auditd`.
+6. **Baixa:** nenhuma CA tem name constraints para `particula.local`; backup off-site inexistente; unseal e emissão a partir do restore não testados.
+7. **Sem evidência (precisa de token):** parâmetros reais das roles (`max_ttl`, `key_usage`), policies, mounts e TTL do token atual.
+
 ## Root token e chaves de unseal
 
 - Token root-equivalente com **TTL de 90 dias** (não "nunca expira" como era antes) — padrão de rotação: criar novo com TTL → validar → revogar o antigo → só então sobrescrever `~/.vault-token`. **Cuidado:** o mount `token/` tem `max_lease_ttl` que corta silenciosamente qualquer `-ttl` maior pedido na criação sem erro visível — checar `bao read sys/auth/token/tune` antes de assumir que o TTL pedido foi o TTL real concedido.
