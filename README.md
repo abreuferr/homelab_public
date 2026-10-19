@@ -6,7 +6,7 @@ Domínio: `particula.local` (203.0.113.0/24). Host físico único de virtualiza�
 
 ## Índice
 
-- [`infra/`](infra/) — host físico Proxmox (`quark`).
+- [`infra/`](infra/) — host físico Proxmox (`quark`); bridge `br0` + libvirt na estação `neutrino`.
 - [`rede/`](rede/) — DNS, filtros (Pi-hole/AdGuard), gateway/firewall.
 - [`seguranca/`](seguranca/) — PKI/CA interna (OpenBao, CA de produção em `203.0.113.15`), modelo de ameaça.
 - [`servicos/`](servicos/) — serviços individuais (cofre de senhas, phpIPAM, syslog, MariaDB Galera Cluster).
