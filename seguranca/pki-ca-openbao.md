@@ -74,7 +74,7 @@ Policies no servidor (2026-10-15): `admin`, `default`, `root` (padrão do OpenBa
 | `pki-issue-https` | `create`/`update` em `pki_int/issue/particula-local` e `pki_int/sign/particula-local` | Emitir certificado (chave gerada no servidor) ou assinar CSR, limitado pela role |
 | `fix-pki-crl` | `read`/`update` em `pki_root/config/crl` e `pki_int/config/crl`; `read` em `pki_root/crl-rotate` e `pki_int/crl-rotate` | Corrigir a config da CRL e forçar rotação (usada no ajuste do `auto_rebuild` de 2026-08-04) |
 
-- `pki-issue-https` e `pki-operator` se sobrepõem na emissão em `particula-local`. A `pki-operator` é a mais completa (emite nas duas roles, revoga, lê config) e é a recomendada. `pki-issue-https` pode ser removida quando nada mais a usar, o que não pude confirmar.
+- `pki-issue-https` e `pki-operator` se sobrepõem na emissão em `particula-local`. A `pki-operator` é a mais completa (emite nas duas roles, revoga, lê config) e é a recomendada. `pki-issue-https` pode ser removida quando nada mais a usar. **Em uso** pelo procedimento de emissão do FreshRSS (ver [../servicos/freshrss.md](../servicos/freshrss.md), renovar até 2027-11-22).
 - `fix-pki-crl` tem `update` em `config/crl`: quem a tiver pode desligar `auto_rebuild` ou encurtar o prazo e deixar a CRL vencer de novo. Criar token só quando precisar e com TTL curto.
 
 Revisão somente leitura, sem token. Itens abertos, por prioridade:
